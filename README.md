@@ -20,6 +20,8 @@ The authors' RTL is used unchanged, as a git submodule (`culsans/`, pinned to
 | `sim/xsim/run_xsim.tcl` | Vivado (XSim) runner |
 | `sim/common/` | No-op stand-ins for the authors' simulation-only loggers |
 | `sw/` | Bare-metal build for the 2-core system (`sw/common` = 2-core startup code) |
+| `sw/bench/` | Splash-3 bare-metal port: runtime (`rt/`), build script, benchmark list and inputs |
+| `synth/synth_culsans.tcl` | Vivado synthesis of the authors' FPGA top (Genesys 2 part) |
 
 ## Setup (Ubuntu on WSL2)
 
@@ -47,6 +49,21 @@ vivado -mode batch -source sim/xsim/run_xsim.tcl -tclargs build/sw/integration/r
 The first run creates `build/xsim/proj` and compiles everything; later runs only simulate.
 A passing program prints `[tb] EXIT code=0 cycles=N` and `*** SUCCESS ***`; the full log is
 `build/xsim/<test>.log`.
+
+## Synthesize in Vivado (Windows)
+
+After `make setup` in Ubuntu, open a Windows Command Prompt in the repo folder (for example
+`C:\work\Culsans_replication`) and run:
+
+```
+vivado -mode batch -nojournal -source synth/synth_culsans.tcl
+```
+
+This creates the authors' Xilinx IPs (clock generator, DDR3 controller, AXI converters, GPIO, SPI, ILA),
+reads the FPGA file list (`build/filelists/culsans_fpga.tcl`) and synthesizes `culsans_xilinx` for the
+Genesys 2 part (xc7k325tffg900-2) at the authors' 50 MHz. Add `-tclargs impl` to also place and route
+(no bitstream). Reports land in `build/fpga/reports/`; `summary.txt` lists LUT/FF/BRAM/DSP for the CCU,
+each core, the caches, the LLC and the crossbar. Expect 1 to 3 hours for synthesis.
 
 ## Simulate with Verilator (optional, faster)
 

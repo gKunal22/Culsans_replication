@@ -33,3 +33,20 @@ print:
 	@for f in $(filter %.vhd,$(uart_src)); do echo "VHD $$f"; done
 	@for f in $(LLC_PKG) $(LLC_SRC); do echo "LLC $$f"; done
 	@for f in $(CUL_PKG) $(CUL_SRC); do echo "CUL $$f"; done
+
+# File list of the FPGA top (culsans_xilinx), in the order of culsans/fpga/Makefile
+# (scripts/add_sources.tcl recipe), with the same fpga_filter. Use target=cv64a6_imafdch_sv39_wb.
+FPGA_FILTER := $(fpga_filter) $(addprefix $(CVA6_DIR), corev_apu/fpga/src/ariane_xilinx.sv) \
+  $(wildcard $(addprefix $(CVA6_DIR), corev_apu/tb/ariene_*.sv))
+CUL_FPGA := $(addprefix $(CVA6_DIR)vendor/planv/ace/src/, ace_intf.sv snoop_intf.sv ccu_fsm.sv ace_trs_dec.sv ace_ccu_top.sv) \
+  $(CUL_RTL)/src/culsans_xilinx.sv
+
+print-fpga:
+	@echo "#TARGET $(target)"
+	@echo "#CVA6_REPO_DIR $(abspath $(CVA6_DIR))"
+	@echo "#INCDIR $(CVA6_DIR)vendor/pulp-platform/common_cells/include $(CVA6_DIR)vendor/pulp-platform/axi/include \
+	  $(CVA6_DIR)vendor/planv/ace/include $(LLC_DIR)/include $(CVA6_DIR)corev_apu/register_interface/include"
+	@for f in $(filter %.vhd,$(uart_src)); do echo "VHD $$f"; done
+	@for f in $(LLC_PKG) $(filter %.sv,$(ariane_pkg)) $(filter-out $(FPGA_FILTER),$(src_flist)) \
+	  $(filter-out $(FPGA_FILTER),$(filter %.sv,$(src))) $(CUL_PKG) $(filter-out $(FPGA_FILTER),$(fpga_src)) \
+	  $(LLC_SRC) $(CUL_FPGA); do echo "SRC $$f"; done

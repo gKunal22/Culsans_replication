@@ -7,7 +7,8 @@
 #   make run HEX=...   run one program on the Verilator model
 #   make regress       run every integration test on the Verilator model
 #
-# Vivado (Windows) uses the same file lists: see README.md, "Simulate in Vivado".
+# Vivado (Windows) uses the same file lists: see README.md, "Simulate in Vivado" and
+# "Synthesize in Vivado" (synth/synth_culsans.tcl reads build/filelists/culsans_fpga.tcl).
 
 SHELL := /bin/bash
 VERILATOR ?= verilator
@@ -39,6 +40,11 @@ filelists:
 	python3 scripts/gen_filelists.py $(FL)/authors_order.txt $(GEN_COMMON) --name culsans_xsim
 	python3 scripts/gen_filelists.py $(FL)/authors_order.txt $(GEN_COMMON) \
 	  --replace sub_per_hash.sv=$(O)/sub_per_hash.sv --name culsans_verilator
+	RISCV=/usr $(MAKE) -s -f scripts/flist.mk CULSANS=culsans target=cv64a6_imafdch_sv39_wb print-fpga \
+	  > $(FL)/authors_fpga_order.txt 2>/dev/null
+	python3 scripts/gen_filelists.py $(FL)/authors_fpga_order.txt --name culsans_fpga \
+	  --exclude corev_apu/tb/ariane_peripherals.sv \
+	  --replace cv64a6_imafdch_sv39_wb_config_pkg.sv=$(O)/cv64a6_imafdch_sv39_wb_config_pkg.sv
 
 sw:
 	$(MAKE) -C sw integration
