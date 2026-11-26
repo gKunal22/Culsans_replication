@@ -20,14 +20,14 @@ cd $repo
 set part      xc7k325tffg900-2
 set board     digilentinc.com:genesys2:part0:1.1
 set boardName genesys2
+if {![info exists argv]} { set argv {} }
 set do_impl   [expr {[lsearch -exact $argv impl] >= 0}]
 set jobs      [expr {[info exists ::env(NUMBER_OF_PROCESSORS)] ? $::env(NUMBER_OF_PROCESSORS) : 4}]
 if {$jobs > 8} { set jobs 8 }
 
 set fl  build/filelists/culsans_fpga.tcl
 if {![file exists $fl]} {
-  puts "ERROR: $fl not found. Run 'make setup' in Ubuntu (WSL) in the repo root first."
-  exit 1
+  error "$fl not found. Run 'make setup' in Ubuntu (WSL) in the repo root first."
 }
 set out  [file normalize build/fpga]
 set rpt  $out/reports
@@ -88,8 +88,7 @@ set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
 launch_runs synth_1 -jobs $jobs
 wait_on_run synth_1
 if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
-  puts "ERROR: synthesis failed, see $out/proj/culsans.runs/synth_1/runme.log"
-  exit 1
+  error "synthesis failed, see $out/proj/culsans.runs/synth_1/runme.log"
 }
 open_run synth_1
 
