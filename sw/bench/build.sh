@@ -9,7 +9,7 @@ root=$(realpath "$(dirname "$0")/../..")
 conf=$root/sw/bench/benchmarks.conf
 splash=$root/third_party/Splash-3/codes
 rt=$root/sw/bench/rt
-out=$root/build/bench
+out=${OUT:-$root/build/bench}
 prefix=${PREFIX:-riscv64-unknown-elf-}
 
 field() { awk -F'|' -v b="$bench" -v n="$1" '{gsub(/^[ \t]+|[ \t]+$/, "", $1)} $1==b {x=$n; gsub(/^[ \t]+|[ \t]+$/, "", x); print x}' "$conf"; }
@@ -24,6 +24,9 @@ src=$out/src/${bench}_p$np
 rm -rf "$src"; mkdir -p "$src"
 cp -r "$splash/$dir"/. "$src"/
 cd "$src"
+# size changes some benchmarks need to fit the simulated memory: sw/bench/patches/<bench>.sed
+patch=$root/sw/bench/patches/$bench.sed
+if [ -f "$patch" ]; then for f in *.in; do sed -i -f "$patch" "$f"; done; fi
 # PARMACS expansion, exactly as Splash-3's Makefile.config does it, with our macros
 # headers may include each other through m4, so expand until every one succeeds
 for pass in 1 2 3 4 5; do
@@ -50,7 +53,7 @@ python3 "$rt/embed_files.py" "$src/bm_inputs.c" "${embed[@]}"
 cflags=(-march=rv64gc_zifencei -mabi=lp64d -mcmodel=medany --specs=picolibc.specs
         -O2 -g -std=gnu11 -fno-strict-aliasing -ffunction-sections
         -D_XOPEN_SOURCE=500 -D_POSIX_C_SOURCE=200112 -DBM_ARGS="\"$bench $args\""
-        -I"$rt" -I"$rt/compat" -I. -include bm.h -w)
+        -I"$rt" -I"$rt/compat" -I. -include bm.h -w ${BM_CFLAGS:-})
 srcs=$(ls *.c)
 for d in $extra_dirs; do srcs="$srcs $(ls $d/*.c)"; cflags+=(-I"$d"); done
 ${prefix}gcc "${cflags[@]}" -nostartfiles -T "$rt/link.ld" \

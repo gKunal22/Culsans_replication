@@ -31,7 +31,20 @@ extern char __tls_base[], __tdata_end[], __tbss_end[];
 extern int main(int argc, char **argv);
 
 /* ------------------------------------------------------------ console */
-static int bm_putc(char c, FILE *f) { (void)f; *UART_THR = (uint8_t)c; return (unsigned char)c; }
+#ifdef BM_SPIKE
+/* functional check on Spike (no UART at 0x10000000 there): HTIF console, device 1 command 1 */
+static bm_lock_t con_lock;
+static void con_put(char c)
+{
+  bm_lock(&con_lock);
+  tohost = (1ULL << 56) | (1ULL << 48) | (unsigned char)c;
+  while (tohost) ;              /* Spike clears tohost once it has taken the character */
+  bm_unlock(&con_lock);
+}
+#else
+static void con_put(char c) { *UART_THR = (uint8_t)c; }
+#endif
+static int bm_putc(char c, FILE *f) { (void)f; con_put(c); return (unsigned char)c; }
 static FILE bm_out = FDEV_SETUP_STREAM(bm_putc, NULL, NULL, _FDEV_SETUP_WRITE);
 
 /* stdin is fed from an embedded file (see bm_files.h), empty if none */
@@ -143,12 +156,12 @@ static struct { const bm_file_t *f; size_t pos; } fds[8];
 
 int open(const char *path, int flags, ...)
 {
-  (void)flags;
   const char *base = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
   for (const bm_file_t *f = bm_files; f->name; f++)
     if (!strcmp(f->name, base))
       for (int i = 3; i < 8; i++)
         if (!fds[i].f) { fds[i].f = f; fds[i].pos = 0; return i; }
+  if (flags & (O_WRONLY | O_RDWR)) return 8;   /* output file: writes are discarded */
   errno = ENOENT;
   return -1;
 }
@@ -164,7 +177,7 @@ ssize_t read(int fd, void *buf, size_t n)
 ssize_t write(int fd, const void *buf, size_t n)
 {
   const char *c = buf;
-  if (fd == 1 || fd == 2) { for (size_t i = 0; i < n; i++) *UART_THR = c[i]; return n; }
+  if (fd == 1 || fd == 2) { for (size_t i = 0; i < n; i++) con_put(c[i]); return n; }
   return n;  /* output files are discarded */
 }
 off_t lseek(int fd, off_t off, int whence)
