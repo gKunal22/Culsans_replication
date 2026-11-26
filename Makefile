@@ -3,6 +3,7 @@
 #   make setup         fetch the authors' sources, write overlays and file lists
 #   make sw            build the authors' integration tests (build/sw/integration/*.hex)
 #   make verilator     build the fast Verilator model (optional, build/verilator/Vtb_culsans)
+#   make verilator-bench  same, with all DRAM coherent (benchmarks; build/verilator_bench/)
 #   make run HEX=...   run one program on the Verilator model
 #   make regress       run every integration test on the Verilator model
 #
@@ -42,13 +43,19 @@ filelists:
 sw:
 	$(MAKE) -C sw integration
 
-verilator: $(FL)/culsans_verilator.f
-	$(VERILATOR) -f $(FL)/culsans_verilator.f culsans/modules/cva6/verilator_config.vlt \
+VFLAGS := -f $(FL)/culsans_verilator.f culsans/modules/cva6/verilator_config.vlt \
 	  --top-module tb_culsans --binary --timing --unroll-count 256 -O3 \
 	  --x-assign fast --x-initial fast \
 	  -Wno-fatal -Wno-lint -Wno-style -Wno-UNOPTFLAT -Wno-BLKANDNBLK -Wno-MULTIDRIVEN \
-	  -Wno-TIMESCALEMOD -Wno-ENUMVALUE \
-	  --Mdir build/verilator -j $(JOBS)
+	  -Wno-TIMESCALEMOD -Wno-ENUMVALUE -j $(JOBS)
+
+# authors' memory map (integration tests)
+verilator: $(FL)/culsans_verilator.f
+	$(VERILATOR) $(VFLAGS) --Mdir build/verilator
+
+# whole DRAM coherent, as on the FPGA/Linux system (benchmarks)
+verilator-bench: $(FL)/culsans_verilator.f
+	$(VERILATOR) $(VFLAGS) -GALL_COHERENT=1 --Mdir build/verilator_bench
 
 HEX        ?=
 MAX_CYCLES ?= 50000000
@@ -61,4 +68,4 @@ run:
 regress:
 	scripts/regress.sh build/sw/integration $(JOBS)
 
-.PHONY: setup submodules filelists sw verilator run regress
+.PHONY: setup submodules filelists sw verilator verilator-bench run regress

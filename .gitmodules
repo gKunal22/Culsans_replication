@@ -1,3 +1,6 @@
 [submodule "culsans"]
 	path = culsans
 	url = https://github.com/pulp-platform/culsans.git
+[submodule "third_party/Splash-3"]
+	path = third_party/Splash-3
+	url = https://github.com/SakalisC/Splash-3.git
