@@ -85,7 +85,7 @@ set soc_sv $culsans_sv
 if {$split} {
   # cores become black boxes; the debug ILA's taps inside the cores are tied to 0
   set fh [open culsans/rtl/src/culsans_xilinx.sv]; set t [read $fh]; close $fh
-  regsub -all {(wire \[[0-9]+:0\] \w+\s*=\s*)gen_ariane\[[0-9]\]\.[^;]+;} $t {\1'0;} t
+  regsub -all {gen_ariane\[[0-9]\]\.i_ariane\.[A-Za-z0-9_.:\[\]]+} $t {1'b0} t
   set fh [open $out/culsans_xilinx_split.sv w]; puts -nonewline $fh $t; close $fh
   set soc_sv {}
   foreach f $culsans_sv {
