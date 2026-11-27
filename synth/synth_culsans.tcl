@@ -9,6 +9,9 @@
 #   - Implementation stops after routing (no bitstream); pass "impl" to run it.
 #   - Default synthesis keeps the hierarchy and skips retiming (much faster, exact per-block numbers);
 #     pass "authors" for their flattened + retiming run.
+#   - Default is "split" mode: the whole SoC needs more memory than a 16 GB PC has, so the SoC is
+#     synthesized with both cores as black boxes, then one core on its own (culsans_core_ooc, identical
+#     parameters). SoC total = rest + 2 x core. Pass "full" to synthesize everything in one run.
 #
 # Prerequisite (once, in Ubuntu/WSL in the repo root): make setup
 # Run (Windows cmd or Vivado Tcl shell, from the repo root):
@@ -28,6 +31,7 @@ set do_impl   [expr {[lsearch -exact $argv impl] >= 0}]
 # authors' settings (flattened netlist + retiming) can run for many hours on a PC; by default we
 # keep the hierarchy and skip retiming (A17). "authors" restores their exact synthesis settings.
 set authors   [expr {[lsearch -exact $argv authors] >= 0}]
+set split     [expr {[lsearch -exact $argv full] < 0}]
 set jobs      [expr {[info exists ::env(NUMBER_OF_PROCESSORS)] ? $::env(NUMBER_OF_PROCESSORS) : 4}]
 # a 16 GB PC runs out of memory with many parallel Vivado processes; keep it to 2
 if {$jobs > 2} { set jobs 2 }
@@ -77,8 +81,21 @@ foreach ip $ips {
 
 # ---- RTL, in the authors' order ---------------------------------------------------------------
 source $fl
+set soc_sv $culsans_sv
+if {$split} {
+  # cores become black boxes; the debug ILA's taps inside the cores are tied to 0
+  set fh [open culsans/rtl/src/culsans_xilinx.sv]; set t [read $fh]; close $fh
+  regsub -all {(wire \[[0-9]+:0\] \w+\s*=\s*)gen_ariane\[[0-9]\]\.[^;]+;} $t {\1'0;} t
+  set fh [open $out/culsans_xilinx_split.sv w]; puts -nonewline $fh $t; close $fh
+  set soc_sv {}
+  foreach f $culsans_sv {
+    if {[string match */culsans_xilinx.sv $f]} { lappend soc_sv $out/culsans_xilinx_split.sv
+    } elseif {[string match */corev_apu/tb/ariane.sv $f]} { lappend soc_sv synth/ariane_blackbox.sv
+    } else { lappend soc_sv $f }
+  }
+}
 read_vhdl $culsans_vhdl
-read_verilog -sv $culsans_sv
+read_verilog -sv $soc_sv
 set_property include_dirs $culsans_incdirs [current_fileset]
 
 set svh  $cva6_fpga/src/genesysii.svh
@@ -133,14 +150,11 @@ proc reports {tag} {
 }
 
 # one line per block of interest: LUT, FF, BRAM tiles, DSP (CCU share is what Table/Section 5 needs)
-proc block_summary {tag} {
+proc block_summary {tag blocks} {
   global rpt
   set fh [open $rpt/summary.txt a]
   puts $fh "# $tag  [clock format [clock seconds] -format {%Y-%m-%d %H:%M}]"
   puts $fh [format "%-58s %9s %9s %7s %5s" block LUT FF BRAM DSP]
-  set blocks {{} i_ccu {gen_ariane[0].i_ariane} {gen_ariane[1].i_ariane}
-    {gen_ariane[0].i_ariane/i_cva6/WB.i_cache_subsystem} {gen_ariane[1].i_ariane/i_cva6/WB.i_cache_subsystem}
-    i_axi_llc i_axi_xbar i_ila_top i_ddr}
   foreach c $blocks {
     if {$c eq {}} { set cells [get_cells -hierarchical -filter {IS_PRIMITIVE}]; set name TOTAL } else {
       # exact name match (generate names contain [] and ., which glob patterns mangle)
@@ -164,9 +178,12 @@ proc block_summary {tag} {
   close $fh
 }
 
+set soc_blocks {{} i_ccu {gen_ariane[0].i_ariane} {gen_ariane[1].i_ariane}
+  {gen_ariane[0].i_ariane/i_cva6/WB.i_cache_subsystem} {gen_ariane[1].i_ariane/i_cva6/WB.i_cache_subsystem}
+  i_axi_llc i_axi_xbar i_ariane_peripherals i_ila_top i_ddr}
 file delete -force $rpt/summary.txt
 reports synth
-block_summary "post-synthesis"
+block_summary [expr {$split ? "post-synthesis, SoC with both cores as black boxes" : "post-synthesis"}] $soc_blocks
 
 if {$do_impl} {
   set_property STEPS.PLACE_DESIGN.ARGS.DIRECTIVE RuntimeOptimized    [get_runs impl_1]
@@ -179,7 +196,38 @@ if {$do_impl} {
   wait_on_run impl_1
   open_run impl_1
   reports impl
-  block_summary "post-route"
+  block_summary "post-route" $soc_blocks
+}
+
+# ---- split mode: one core on its own, same parameters as in culsans_xilinx ---------------------
+if {$split} {
+  close_project
+  create_project culsans_core $out/proj_core -part $part -force
+  set core_sv {}
+  foreach f $culsans_sv { if {![string match */culsans_xilinx.sv $f]} { lappend core_sv $f } }
+  lappend core_sv synth/culsans_core_ooc.sv
+  read_verilog -sv $core_sv
+  set_property include_dirs $culsans_incdirs [current_fileset]
+  read_verilog -sv [list $svh $regs]
+  set_property -dict {file_type {Verilog Header} is_global_include 1} \
+    [get_files -of_objects [get_filesets sources_1] [list [file normalize $svh] [file normalize $regs]]]
+  set_property top culsans_core_ooc [current_fileset]
+  # the core runs on the 50 MHz clock (clk_out1 of xlnx_clk_gen) in the authors' design
+  set fh [open $out/core_ooc.xdc w]; puts $fh "create_clock -period 20.000 -name clk \[get_ports clk_i\]"; close $fh
+  add_files -fileset constrs_1 -norecurse $out/core_ooc.xdc
+  update_compile_order -fileset sources_1
+  set_property STEPS.SYNTH_DESIGN.ARGS.FLATTEN_HIERARCHY none [get_runs synth_1]
+  set_property -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} -value {-mode out_of_context} -objects [get_runs synth_1]
+  set_property STEPS.SYNTH_DESIGN.TCL.PRE [file normalize $out/synth_pre.tcl] [get_runs synth_1]
+  launch_runs synth_1 -jobs 1
+  wait_on_run synth_1
+  if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
+    error "core synthesis failed, see $out/proj_core/culsans_core.runs/synth_1/runme.log"
+  }
+  open_run synth_1
+  reports core_synth
+  block_summary "post-synthesis, one core (culsans_core_ooc); SoC total = black-box SoC + 2 x this" \
+    {{} i_ariane i_ariane/i_cva6/WB.i_cache_subsystem}
 }
 
 puts "\n==== done; reports in $rpt ===="

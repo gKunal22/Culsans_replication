@@ -63,7 +63,7 @@ This creates the authors' Xilinx IPs (clock generator, DDR3 controller, AXI conv
 reads the FPGA file list (`build/filelists/culsans_fpga.tcl`) and synthesizes `culsans_xilinx` for the
 Genesys 2 part (xc7k325tffg900-2) at the authors' 50 MHz. Add `-tclargs impl` to also place and route
 (no bitstream), and `authors` to use their exact synthesis settings (flattened netlist with retiming; can take many hours on a PC). Reports land in `build/fpga/reports/`; `summary.txt` lists LUT/FF/BRAM/DSP for the CCU,
-each core, the caches, the LLC and the crossbar. Expect 1 to 3 hours for synthesis.
+each core, the caches, the LLC and the crossbar. By default the SoC is synthesized with the two cores as black boxes and then one core on its own, because the whole SoC needs more memory than a 16 GB PC has; `summary.txt` lists both parts (SoC total = rest + 2 x core). Add `-tclargs full` for one run of everything on a larger machine. Expect 1 to 3 hours.
 
 ## Simulate with Verilator (optional, faster)
 
