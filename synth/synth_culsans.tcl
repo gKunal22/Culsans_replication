@@ -60,8 +60,9 @@ set_msg_config -id {[Synth 8-4480]} -limit 1000
 
 # ---- Xilinx IPs, with the authors' settings (culsans/fpga/xilinx/<ip>/tcl/run.tcl) -------------
 set ips {xlnx_axi_clock_converter xlnx_axi_dwidth_converter xlnx_axi_dwidth_converter_dm_master
-         xlnx_axi_dwidth_converter_dm_slave xlnx_axi_quad_spi xlnx_axi_gpio xlnx_clk_gen xlnx_ila
+         xlnx_axi_dwidth_converter_dm_slave xlnx_axi_quad_spi xlnx_axi_gpio xlnx_clk_gen
          xlnx_mig_7_ddr3}
+# xlnx_ila (two debug ILAs, 13 probes) is replaced by an empty module: the BASIC licence refuses it
 foreach ip $ips {
   set fh [open $ip_src/$ip/tcl/run.tcl]; set text [read $fh]; close $fh
   # keep the create_ip and set_property part, drop the per-IP project and its runs
@@ -108,6 +109,7 @@ foreach f $culsans_sv {
   } else { lappend soc_sv $f }
 }
 read_vhdl $culsans_vhdl
+lappend soc_sv synth/xlnx_ila_stub.sv
 read_verilog -sv $soc_sv
 set_property include_dirs $culsans_incdirs [current_fileset]
 
