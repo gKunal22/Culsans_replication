@@ -32,6 +32,9 @@ set do_impl   [expr {[lsearch -exact $argv impl] >= 0}]
 # keep the hierarchy and skip retiming (A17). "authors" restores their exact synthesis settings.
 set authors   [expr {[lsearch -exact $argv authors] >= 0}]
 set split     [expr {[lsearch -exact $argv full] < 0}]
+# "core": only the core run of split mode (keeps the SoC results already in summary.txt)
+set coreonly  [expr {[lsearch -exact $argv core] >= 0}]
+if {$coreonly} { set split 1 }
 set jobs      [expr {[info exists ::env(NUMBER_OF_PROCESSORS)] ? $::env(NUMBER_OF_PROCESSORS) : 4}]
 # a 16 GB PC runs out of memory with many parallel Vivado processes; keep it to 2
 if {$jobs > 2} { set jobs 2 }
@@ -64,6 +67,7 @@ set ips {xlnx_axi_clock_converter xlnx_axi_dwidth_converter xlnx_axi_dwidth_conv
          xlnx_mig_7_ddr3}
 # xlnx_ila (two debug ILAs, 13 probes) is replaced by an empty module: the BASIC licence refuses it
 foreach ip $ips {
+  if {$coreonly} break
   set fh [open $ip_src/$ip/tcl/run.tcl]; set text [read $fh]; close $fh
   # keep the create_ip and set_property part, drop the per-IP project and its runs
   set a [string first "create_ip" $text]
@@ -132,6 +136,7 @@ if {$authors} {
 }
 # IPs first, one at a time, each retried once (a parallel IP run can die when memory is short)
 foreach ip $ips {
+  if {$coreonly} break
   set r [get_runs -quiet ${ip}_synth_1]
   if {$r eq {}} continue
   for {set try 0} {$try < 2} {incr try} {
@@ -148,16 +153,15 @@ foreach ip $ips {
 # in "Cross Boundary and Area Optimization". Run the main synthesis in a single process.
 set fh [open $out/synth_pre.tcl w]; puts $fh "set_param general.maxThreads 1"; close $fh
 set_property STEPS.SYNTH_DESIGN.TCL.PRE [file normalize $out/synth_pre.tcl] [get_runs synth_1]
-launch_runs synth_1 -jobs $jobs
-catch {wait_on_run synth_1}
-set soc_ok [expr {[get_property PROGRESS [get_runs synth_1]] eq "100%"}]
-if {!$soc_ok && !$split} {
-  error "synthesis failed, see $out/proj/culsans.runs/synth_1/runme.log"
+if {!$coreonly} {
+  launch_runs synth_1 -jobs $jobs
+  catch {wait_on_run synth_1}
+  set soc_ok [expr {[get_property PROGRESS [get_runs synth_1]] eq "100%"}]
+  if {!$soc_ok && !$split} {
+    error "synthesis failed, see $out/proj/culsans.runs/synth_1/runme.log"
+  }
+  file delete -force $rpt/summary.txt
 }
-file delete -force $rpt/summary.txt
-if {$soc_ok} {
-open_run synth_1
-
 proc reports {tag} {
   global rpt
   check_timing -verbose                                                    -file $rpt/$tag.check_timing.rpt
@@ -196,9 +200,13 @@ proc block_summary {tag blocks} {
   close $fh
 }
 
+if {$coreonly} {
+} elseif {$soc_ok} {
+open_run synth_1
+
 set soc_blocks {{} i_ccu {gen_ariane[0].i_ariane} {gen_ariane[1].i_ariane}
   {gen_ariane[0].i_ariane/i_cva6/WB.i_cache_subsystem} {gen_ariane[1].i_ariane/i_cva6/WB.i_cache_subsystem}
-  i_axi_llc i_axi_xbar i_ariane_peripherals i_ila_top i_ddr}
+  LLC.i_axi_llc i_axi_xbar i_axi_riscv_atomics i_ariane_peripherals i_dm_top i_ddr i_xlnx_axi_clock_converter_ddr}
 reports synth
 block_summary [expr {$split ? "post-synthesis, SoC with both cores as black boxes" : "post-synthesis"}] $soc_blocks
 
