@@ -91,6 +91,16 @@ if {$split} {
   regsub -all {gen_ariane\[[0-9]\]\.i_ariane\.[A-Za-z0-9_.:\[\]]+} $t {1'b0} t
 }
 set fh [open $out/culsans_xilinx_synth.sv w]; puts -nonewline $fh $t; close $fh
+# Vivado 2026.1 hit an internal assertion in its RAM optimizer (HOptRamOpt.cc, .ramAssert) on the
+# XPM memories behind tc_sram (LLC data/tag arrays). Ask XPM for plain block RAM without its
+# "unused memory" optimization; the memory contents and ports are unchanged (A17).
+set fh [open culsans/modules/cva6/vendor/pulp-platform/tech_cells_generic/src/fpga/tc_sram_xilinx.sv]
+set t2 [read $fh]; close $fh
+regsub -all {\.MEMORY_OPTIMIZATION(\s*)\(\s*"true"\s*\)} $t2 {.MEMORY_OPTIMIZATION\1( "false" )} t2
+regsub -all {\.MEMORY_PRIMITIVE(\s*)\(\s*"auto"\s*\)} $t2 {.MEMORY_PRIMITIVE\1( "block" )} t2
+set fh [open $out/tc_sram_xilinx.sv w]; puts -nonewline $fh $t2; close $fh
+set culsans_sv [lmap f $culsans_sv {expr {[string match */src/fpga/tc_sram_xilinx.sv $f] ? "$out/tc_sram_xilinx.sv" : $f}}]
+
 set soc_sv {}
 foreach f $culsans_sv {
   if {[string match */culsans_xilinx.sv $f]} { lappend soc_sv $out/culsans_xilinx_synth.sv
@@ -231,8 +241,11 @@ if {$split} {
   set_property -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} -value {-mode out_of_context} -objects [get_runs synth_1]
   set_property STEPS.SYNTH_DESIGN.TCL.PRE [file normalize $out/synth_pre.tcl] [get_runs synth_1]
   launch_runs synth_1 -jobs 1
-  wait_on_run synth_1
+  catch {wait_on_run synth_1}
   if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
+    set fh [open $rpt/summary.txt a]
+    puts $fh "# core synthesis FAILED, see $out/proj_core/culsans_core.runs/synth_1/runme.log"
+    close $fh
     error "core synthesis failed, see $out/proj_core/culsans_core.runs/synth_1/runme.log"
   }
   open_run synth_1
