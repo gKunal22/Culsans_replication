@@ -81,18 +81,21 @@ foreach ip $ips {
 
 # ---- RTL, in the authors' order ---------------------------------------------------------------
 source $fl
-set soc_sv $culsans_sv
+# Vivado 2026.1 flags the Ethernet MAC's legacy RAMB16_S9_S36 primitives as unsupported (Netlist 29-5298)
+# and synthesis then died silently in Cross Boundary and Area Optimization. Ethernet is a peripheral that
+# plays no part in the paper's evaluation; we drop it as the authors' KC705/VC707 builds do (A17).
+set fh [open culsans/rtl/src/culsans_xilinx.sv]; set t [read $fh]; close $fh
+regsub {(`ifdef KINTEX7\s*\.InclSPI\s*\(\s*1'b1\s*\),\s*\.InclEthernet\s*\(\s*)1'b1} $t {\11'b0} t
 if {$split} {
   # cores become black boxes; the debug ILA's taps inside the cores are tied to 0
-  set fh [open culsans/rtl/src/culsans_xilinx.sv]; set t [read $fh]; close $fh
   regsub -all {gen_ariane\[[0-9]\]\.i_ariane\.[A-Za-z0-9_.:\[\]]+} $t {1'b0} t
-  set fh [open $out/culsans_xilinx_split.sv w]; puts -nonewline $fh $t; close $fh
-  set soc_sv {}
-  foreach f $culsans_sv {
-    if {[string match */culsans_xilinx.sv $f]} { lappend soc_sv $out/culsans_xilinx_split.sv
-    } elseif {[string match */corev_apu/tb/ariane.sv $f]} { lappend soc_sv synth/ariane_blackbox.sv
-    } else { lappend soc_sv $f }
-  }
+}
+set fh [open $out/culsans_xilinx_synth.sv w]; puts -nonewline $fh $t; close $fh
+set soc_sv {}
+foreach f $culsans_sv {
+  if {[string match */culsans_xilinx.sv $f]} { lappend soc_sv $out/culsans_xilinx_synth.sv
+  } elseif {$split && [string match */corev_apu/tb/ariane.sv $f]} { lappend soc_sv synth/ariane_blackbox.sv
+  } else { lappend soc_sv $f }
 }
 read_vhdl $culsans_vhdl
 read_verilog -sv $soc_sv
@@ -134,10 +137,13 @@ foreach ip $ips {
 set fh [open $out/synth_pre.tcl w]; puts $fh "set_param general.maxThreads 1"; close $fh
 set_property STEPS.SYNTH_DESIGN.TCL.PRE [file normalize $out/synth_pre.tcl] [get_runs synth_1]
 launch_runs synth_1 -jobs $jobs
-wait_on_run synth_1
-if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
+catch {wait_on_run synth_1}
+set soc_ok [expr {[get_property PROGRESS [get_runs synth_1]] eq "100%"}]
+if {!$soc_ok && !$split} {
   error "synthesis failed, see $out/proj/culsans.runs/synth_1/runme.log"
 }
+file delete -force $rpt/summary.txt
+if {$soc_ok} {
 open_run synth_1
 
 proc reports {tag} {
@@ -181,7 +187,6 @@ proc block_summary {tag blocks} {
 set soc_blocks {{} i_ccu {gen_ariane[0].i_ariane} {gen_ariane[1].i_ariane}
   {gen_ariane[0].i_ariane/i_cva6/WB.i_cache_subsystem} {gen_ariane[1].i_ariane/i_cva6/WB.i_cache_subsystem}
   i_axi_llc i_axi_xbar i_ariane_peripherals i_ila_top i_ddr}
-file delete -force $rpt/summary.txt
 reports synth
 block_summary [expr {$split ? "post-synthesis, SoC with both cores as black boxes" : "post-synthesis"}] $soc_blocks
 
@@ -197,6 +202,12 @@ if {$do_impl} {
   open_run impl_1
   reports impl
   block_summary "post-route" $soc_blocks
+}
+
+} else {
+  set fh [open $rpt/summary.txt a]
+  puts $fh "# SoC (cores as black boxes) synthesis FAILED, see $out/proj/culsans.runs/synth_1/runme.log\n"
+  close $fh
 }
 
 # ---- split mode: one core on its own, same parameters as in culsans_xilinx ---------------------
