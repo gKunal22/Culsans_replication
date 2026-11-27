@@ -7,10 +7,13 @@
 #   - The Digilent board files are optional; without them the part alone is used (A17).
 #   - The L1 D-cache is 16 kB (overlay of the imafdch config package, assumption A4).
 #   - Implementation stops after routing (no bitstream); pass "impl" to run it.
+#   - Default synthesis keeps the hierarchy and skips retiming (much faster, exact per-block numbers);
+#     pass "authors" for their flattened + retiming run.
 #
 # Prerequisite (once, in Ubuntu/WSL in the repo root): make setup
 # Run (Windows cmd or Vivado Tcl shell, from the repo root):
 #   vivado -mode batch -nojournal -source synth/synth_culsans.tcl                 (synthesis only)
+#   in the Vivado Tcl Shell instead: cd C:/work/culsans_replication; set argv {}; source synth/synth_culsans.tcl
 #   vivado -mode batch -nojournal -source synth/synth_culsans.tcl -tclargs impl   (+ place and route)
 # Results: build/fpga/reports/*.rpt and build/fpga/reports/summary.txt
 
@@ -22,6 +25,9 @@ set board     digilentinc.com:genesys2:part0:1.1
 set boardName genesys2
 if {![info exists argv]} { set argv {} }
 set do_impl   [expr {[lsearch -exact $argv impl] >= 0}]
+# authors' settings (flattened netlist + retiming) can run for many hours on a PC; by default we
+# keep the hierarchy and skip retiming (A17). "authors" restores their exact synthesis settings.
+set authors   [expr {[lsearch -exact $argv authors] >= 0}]
 set jobs      [expr {[info exists ::env(NUMBER_OF_PROCESSORS)] ? $::env(NUMBER_OF_PROCESSORS) : 4}]
 if {$jobs > 8} { set jobs 8 }
 
@@ -84,7 +90,11 @@ add_files -fileset constrs_1 -norecurse $cva6_fpga/constraints/ariane.xdc
 update_compile_order -fileset sources_1
 
 # ---- synthesis (authors: default strategy + retiming) ------------------------------------------
-set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
+if {$authors} {
+  set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
+} else {
+  set_property STEPS.SYNTH_DESIGN.ARGS.FLATTEN_HIERARCHY none [get_runs synth_1]
+}
 launch_runs synth_1 -jobs $jobs
 wait_on_run synth_1
 if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
