@@ -1,0 +1,12 @@
+benchmark,roi_cycles_1core,roi_cycles_2core,speedup_2v1,stalls_per_instr_2core,memops_per_instr_2core,ok_1core,ok_2core
+barnes,31590452,16293101,1.939,0.630,0.408,True,True
+cholesky,27295709,18371228,1.486,0.873,0.336,True,True
+fft,3111464,1733120,1.795,1.478,0.280,True,True
+fmm,15769528,10308066,1.530,0.720,0.249,True,True
+lu_cont,1381523,754937,1.830,0.609,0.373,True,True
+lu_nc,1535192,937140,1.638,0.792,0.367,True,True
+ocean,33078217,16174409,2.045,1.662,0.321,True,True
+radiosity,31909941,18462376,1.728,0.484,0.365,True,True
+radix,11600883,6513376,1.781,1.870,0.216,True,True
+water_nsq,18381132,9352532,1.965,0.813,0.306,True,True
+water_sp,36953335,18460198,2.002,0.838,0.285,True,True

@@ -1,6 +1,6 @@
 # Differences from the Culsans paper
 
-State on 2026-11-27. IDs refer to `ASSUMPTIONS.md`. FMM is still running, so its row is pending.
+State on 2026-11-27, all 11 benchmarks done (raw numbers in `bench_results.csv`). IDs refer to `ASSUMPTIONS.md`.
 
 ## 1. Design (RTL)
 | # | Paper | Ours | Effect on results |
@@ -35,7 +35,7 @@ State on 2026-11-27. IDs refer to `ASSUMPTIONS.md`. FMM is still running, so its
 | Barnes | 1.94 / 1.96 | 0.63 / 0.67 | 0.41 / 0.44 |
 | Cholesky | **1.49 / 1.62** | 0.87 / 1.07 | 0.34 / 0.28 |
 | Radiosity | **1.73 / 1.95** | 0.48 / 0.48 | 0.37 / 0.35 |
-| FMM | pending | pending | pending |
+| FMM | **1.53 / 1.89** | 0.72 / 0.60 | 0.25 / 0.21 |
 | Water Nsq | 1.97 / 1.94 | 0.81 / 0.90 | 0.31 / 0.31 |
 | LU NC | **1.64 / 1.86** | **0.79 / 3.66** | 0.37 / 0.36 |
 | Water Sp | 2.00 / 1.99 | 0.84 / 0.69 | 0.29 / 0.32 |
@@ -48,4 +48,4 @@ State on 2026-11-27. IDs refer to `ASSUMPTIONS.md`. FMM is still running, so its
 - Mem ops/instr match everywhere (within 0.06), so the programs do the same work.
 - Stalls are lower in Ocean, LU NC, LU Cont and Radix: their reduced inputs fit in the 16 kB L1 / 128 kB LLC, and memory has no delay (A9, A11).
 - Ocean beats the paper's 2-core speedup (2.05, slightly superlinear) for the same reason: each core's half of the grid fits in its own L1.
-- Cholesky, Radiosity and LU NC scale worse than the paper: with small inputs, locks and barriers are a bigger share of the run.
+- Cholesky, Radiosity, LU NC and FMM scale worse than the paper: with small inputs, locks and barriers are a bigger share of the run.
