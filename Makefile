@@ -63,6 +63,11 @@ verilator: $(FL)/culsans_verilator.f
 verilator-bench: $(FL)/culsans_verilator.f
 	$(VERILATOR) $(VFLAGS) -GALL_COHERENT=1 --Mdir build/verilator_bench
 
+# same, with a fixed main-memory delay of MEM_DELAY cycles on each AXI channel (A9 sensitivity runs)
+MEM_DELAY ?= 5
+verilator-bench-delay: $(FL)/culsans_verilator.f
+	$(VERILATOR) $(VFLAGS) -GALL_COHERENT=1 -GMEM_DELAY_IN=$(MEM_DELAY) -GMEM_DELAY_OUT=$(MEM_DELAY) --Mdir build/verilator_bench_d$(MEM_DELAY)
+
 HEX        ?=
 MAX_CYCLES ?= 50000000
 run:
