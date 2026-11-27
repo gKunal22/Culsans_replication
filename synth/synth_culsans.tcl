@@ -29,7 +29,8 @@ set do_impl   [expr {[lsearch -exact $argv impl] >= 0}]
 # keep the hierarchy and skip retiming (A17). "authors" restores their exact synthesis settings.
 set authors   [expr {[lsearch -exact $argv authors] >= 0}]
 set jobs      [expr {[info exists ::env(NUMBER_OF_PROCESSORS)] ? $::env(NUMBER_OF_PROCESSORS) : 4}]
-if {$jobs > 8} { set jobs 8 }
+# a 16 GB PC runs out of memory with many parallel Vivado processes; keep it to 2
+if {$jobs > 2} { set jobs 2 }
 
 set fl  build/filelists/culsans_fpga.tcl
 if {![file exists $fl]} {
@@ -44,6 +45,8 @@ set cva6_fpga culsans/modules/cva6/corev_apu/fpga
 set ip_src    culsans/fpga/xilinx
 
 create_project culsans $out/proj -part $part -force
+# keep synthesized IPs outside the project so a rerun reuses them
+catch {config_ip_cache -use_cache_location $out/ip_cache}
 if {[catch {set_property board_part $board [current_project]} err]} {
   puts "NOTE: board files for $board not installed; using part $part only."
 }
@@ -94,6 +97,20 @@ if {$authors} {
   set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
 } else {
   set_property STEPS.SYNTH_DESIGN.ARGS.FLATTEN_HIERARCHY none [get_runs synth_1]
+}
+# IPs first, one at a time, each retried once (a parallel IP run can die when memory is short)
+foreach ip $ips {
+  set r [get_runs -quiet ${ip}_synth_1]
+  if {$r eq {}} continue
+  for {set try 0} {$try < 2} {incr try} {
+    if {[get_property PROGRESS $r] eq "100%" && ![string match *ERROR* [get_property STATUS $r]]} break
+    if {$try > 0} { reset_run $r }
+    catch {launch_runs $r -jobs 1}
+    catch {wait_on_run $r}
+  }
+  if {[get_property PROGRESS $r] ne "100%"} {
+    error "IP $ip failed twice, see $out/proj/culsans.runs/${ip}_synth_1/runme.log"
+  }
 }
 launch_runs synth_1 -jobs $jobs
 wait_on_run synth_1
