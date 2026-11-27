@@ -50,7 +50,7 @@ catch {config_ip_cache -use_cache_location $out/ip_cache}
 if {[catch {set_property board_part $board [current_project]} err]} {
   puts "NOTE: board files for $board not installed; using part $part only."
 }
-set_param general.maxThreads 8
+set_param general.maxThreads 2
 set_msg_config -id {[Synth 8-5858]} -new_severity "info"
 set_msg_config -id {[Synth 8-4480]} -limit 1000
 
@@ -112,6 +112,10 @@ foreach ip $ips {
     error "IP $ip failed twice, see $out/proj/culsans.runs/${ip}_synth_1/runme.log"
   }
 }
+# Vivado splits synth_design over helper processes (Synth 8-7079); on Windows these stalled at 0 % CPU
+# in "Cross Boundary and Area Optimization". Run the main synthesis in a single process.
+set fh [open $out/synth_pre.tcl w]; puts $fh "set_param general.maxThreads 1"; close $fh
+set_property STEPS.SYNTH_DESIGN.TCL.PRE [file normalize $out/synth_pre.tcl] [get_runs synth_1]
 launch_runs synth_1 -jobs $jobs
 wait_on_run synth_1
 if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
