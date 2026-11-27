@@ -234,6 +234,8 @@ if {$do_impl} {
 if {$split} {
   close_project
   create_project culsans_core $out/proj_core -part $part -force
+  # no Xilinx IP in this project, so Vivado does not enable the XPM library on its own (tc_sram needs it)
+  set_property XPM_LIBRARIES {XPM_CDC XPM_MEMORY XPM_FIFO} [current_project]
   set core_sv {}
   foreach f $culsans_sv { if {![string match */culsans_xilinx.sv $f]} { lappend core_sv $f } }
   lappend core_sv synth/culsans_core_ooc.sv
